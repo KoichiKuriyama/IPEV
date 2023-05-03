@@ -1,1 +1,3 @@
 # IPEV Model
+
+The integer programing extreme value (IPEV) model  accounts the integer property of trip data and has the same advantages as the multiple discrete–continuous extreme value choice (MDCEV) model. IPEV model is consistent with utility theory and provides a single structural framework for simultaneously modeling the choice of alternatives and quantity decisions with the constraint of the integer value of consumption. This model has a closed-form probability expression. This  code includes the estimation using closed-form or simulation, the demand prediction, the welfare analysis, and the sample dataset.
