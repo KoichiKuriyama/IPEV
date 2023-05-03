@@ -1,0 +1,678 @@
+/*
+*************************************************************
+                                                                 
+   Estimation Code of Demand Prediction and Welfare Analysis 
+             with Integer Programming Extreme Value    
+                          v1.00
+
+                        Written by 
+
+                      Koich Kuriyama
+
+            Division of Natural Resource Economics,
+                Graduate School of Agriculture,
+                      Kyoto University
+                  Oiwake-cho, Kitashirakawa, 
+                Sakyo-ku, Kyoto 606-8502, JAPAN
+                 E-mail kuriyama.koichi.8w@kyoto-u.ac.jp
+     　　　 Web: http://kkuri.eco.coocan.jp/index-e.html
+
+                         03/18/2023
+
+*************************************************************
+*/
+
+
+/*
+Data format for N_GOODS = 6
+  1:    person id 
+  2- 6: consumption of inside goods (x_2,...,x_6)
+  7- 11: psi1 (z1_2,....,z1_6)
+ 12- 16: psi2 (z2_2,....,z2_6)
+ 17- 21: psi3 (z3_2,....,z3_6)
+ 22:     income
+ 23- 27: price (price_2,...,price_6)
+*/
+new;
+outwidth 256;
+screen on;
+cls;
+
+@--------------------------@
+@      SETTING START       @
+@--------------------------@
+
+@ Output File Setting @
+output file = DEMAND.out reset;
+
+@ Loading data @
+load DATA[2000,27] = data.txt; @ Data File @
+
+@ Number of observations @
+N_OBS = rows(DATA);
+
+@ Number of goods (including an outside good) @
+N_GOODS = 6;
+
+@ Nubmer of Psi variables @
+N_PSI = 3; 
+
+@ Function form @
+@ U_FUNCTION = 1; alpha profile @
+@ U_FUNCTION = 2; gamma profile @
+@ U_FUNCTION = 3; hybrid profile @
+@ U_FUNCTION = 4; alpha profile without fixed effect @
+@ U_FUNCTION = 5; gamma profile without fixed effect  @
+@ U_FUNCTION = 6; hybrid profile without fixed effect  @
+
+U_FUNCTION = 1;
+
+@--------------------------@
+@   Estimated Parameters   @
+@--------------------------@
+@ Reparameterized values @
+B = {
+     -0.23513031 
+      0.10808963 
+     -0.11189160 
+      0.70802886 
+      0.28184628 
+      0.21525022 
+      0.21862314 
+      0.21025715 
+      0.20116693 
+      0.58374302 
+};
+
+VCOV = {
+        1.818678e-02        -1.955639e-04        -1.729888e-04         1.826887e-03        -5.022233e-04        -1.351295e-04        -8.811006e-04        -1.344551e-04        -1.875765e-03         1.656219e-04 
+       -1.955639e-04         2.230417e-04        -1.043994e-06         5.613998e-05         2.640558e-05         7.089374e-06         1.243204e-05         5.569595e-05         1.028051e-04        -3.949593e-06 
+       -1.729888e-04        -1.043994e-06         2.054410e-04         4.191365e-05         4.373879e-05         7.671477e-05         7.011653e-05         6.520254e-05         5.521325e-05        -3.723086e-05 
+        1.826887e-03         5.613998e-05         4.191365e-05         2.348269e-04        -2.907455e-05         1.374906e-05        -6.413420e-05         3.066987e-05        -1.419676e-04         1.974126e-05 
+       -5.022233e-04         2.640558e-05         4.373879e-05        -2.907455e-05         1.422518e-03         5.699836e-04         6.056088e-04         8.240620e-04         9.245315e-04        -3.393782e-04 
+       -1.351295e-04         7.089374e-06         7.671477e-05         1.374906e-05         5.699836e-04         1.641686e-03         6.724395e-04         9.459355e-04         1.000973e-03        -3.745597e-04 
+       -8.811006e-04         1.243204e-05         7.011653e-05        -6.413420e-05         6.056088e-04         6.724395e-04         1.719946e-03         9.505650e-04         1.083802e-03        -3.750442e-04 
+       -1.344551e-04         5.569595e-05         6.520254e-05         3.066987e-05         8.240620e-04         9.459355e-04         9.505650e-04         2.394987e-03         1.399538e-03        -4.899817e-04 
+       -1.875765e-03         1.028051e-04         5.521325e-05        -1.419676e-04         9.245315e-04         1.000973e-03         1.083802e-03         1.399538e-03         2.800128e-03        -5.254585e-04 
+        1.656219e-04        -3.949593e-06        -3.723086e-05         1.974126e-05        -3.393782e-04        -3.745597e-04        -3.750442e-04        -4.899817e-04        -5.254585e-04         2.670159e-04 
+};
+
+@--------------------------@
+@        Scenarios         @
+@--------------------------@
+
+{ X_INSIDE, PSIDATA, INCOME, PRICE, XOUT1, CSET_INSIDE } = mydata(DATA) ;          
+
+/*
+Data matrices and vectors. 
+All matrices and vectors have N_OBS rows.
+X_INSIDE    : Consumption of inside goods, (N_GOODS - 1) columns
+PSIDATA     : Psi data, (N_GOODS - 1) * N_PSI columns
+INCOME      : Income, 1 column
+PRICE       : Price of inside goods, (N_GOODS - 1) columns
+XOUT1       : Consumption of outside good, 1 column
+CSET_INSIDE : Dummy matrix of choice set (=1 if included in choice set,
+              =0 otherwise), (N_GOODS - 1) columns
+*/
+
+
+@ Scenario #1: Adding $10 to price of alternative 1 @
+
+PRICE1 = PRICE ;
+PRICE1[.,1]   = PRICE1[.,1] + 10;
+PSIDATA1 = PSIDATA ;
+CSET_INSIDE1  = CSET_INSIDE ;
+
+@ Scenario #2: Removing alternrative 2 @
+PRICE2 = PRICE ;
+PRICE2[.,2]   = ones(rows(PRICE),1).*100000000 ;
+PSIDATA2 = PSIDATA ;
+CSET_INSIDE2  = CSET_INSIDE ;
+
+@ Scenario #3: Adding $10 to the prices of all alternatives @
+PRICE3 = PRICE + 10 ;
+PSIDATA3 = PSIDATA ;
+CSET_INSIDE3  = CSET_INSIDE ;
+
+
+@--------------------------@
+@       OTHER SETTING      @
+@--------------------------@
+
+@ Number of iteration of simulated likelihood @
+N_SIM = 10;
+
+@ Random seed @
+SEED1 = 12345;
+
+@ Number of Krinsky-Robb iterations @
+N_KR = 100 ; @ N_KR = 1: point estimates, N_KR > 1: Krinsky-Robb iterations @
+
+@--------------------------@
+@        SETTING END       @
+@--------------------------@
+
+B = B';
+vcov = reshape(vcov,rows(b),rows(b));
+  
+N_INSIDE = N_GOODS - 1;
+MAX_X = maxc(sumc(X_INSIDE'))*10;
+
+@ Alpha @
+if U_FUNCTION == 1;
+    N_ALPHA = N_GOODS;
+elseif (U_FUNCTION == 2)+(U_FUNCTION == 3)+(U_FUNCTION == 5)+(U_FUNCTION == 6);
+    N_ALPHA = 1;
+elseif U_FUNCTION == 4;
+    N_ALPHA = 2;
+else;
+    print "Error in U_FUNCTION";
+    stop;
+endif;
+
+@ Gamma @
+if (U_FUNCTION == 1)+(U_FUNCTION == 4);
+    N_GAMMA = 0;
+elseif (U_FUNCTION == 2)+(U_FUNCTION == 3);
+    N_GAMMA = N_INSIDE;
+elseif (U_FUNCTION == 5)+(U_FUNCTION == 6);
+    N_GAMMA = 1;
+endif;
+
+
+struct util_data {
+    matrix demand;
+    matrix price;
+    matrix alpha1;
+    matrix alphak;
+    matrix gammak;
+    matrix psik;
+    matrix psiout;
+    matrix xout;
+    matrix keep;
+    matrix sig;
+};
+
+struct demand_data {
+    matrix psi;
+    matrix psiout;
+    matrix price;
+    matrix inc;
+    matrix util0;
+    matrix alpha1;
+    matrix alphak;
+    matrix gamma1;
+    matrix gammak;
+    matrix keep;
+    matrix hprice;
+    matrix xout;
+};
+
+if N_KR == 1 ;
+   startt = hsec;
+   { WTP, DEMAND, DEMAND2 } = wtp1(B) ;
+   stopt  = hsec;
+   fmat = "       Point Estimates of Demand and WTP, U_FUNCTION: %*.*lf";
+   title = ftos(U_FUNCTION,fmat,1,0);
+   print "******************************************************************";
+   print title;
+   print "******************************************************************";
+   print;
+   print "Time (in minutes):                 " ((-startt+stopt)/6000);
+   print "Total Generated Draws:              " N_SIM;
+   print ;				
+   print;				
+   print;				
+   print "Mean for Demand";
+   print "       BASELINE         SCENARIO #1      SCENARIO #2      SCENARIO #3";   
+   print meanc(DEMAND)';
+   print;
+   print;				
+   print "       GOODS            BASELINE         SCENARIO #1      SCENARIO #2      SCENARIO #3";   
+   TEMP = (seqa(1,1,N_INSIDE))~(meanc(DEMAND2[.,1:N_INSIDE]))~(meanc(DEMAND2[.,(N_INSIDE+1):(N_INSIDE*2)]))
+   ~(meanc(DEMAND2[.,(N_INSIDE*2+1):(N_INSIDE*3)]))~(meanc(DEMAND2[.,(N_INSIDE*3+1):(N_INSIDE*4)]));
+   print TEMP;
+   print;
+   print;				
+   print "Mean for WTP";
+   print "       SCENARIO #1      SCENARIO #2      SCENARIO #3";   
+   print meanc(WTP[.,1:3])';
+   print;
+
+else;
+   KR1 = zeros(N_KR,7);
+   KR2 = zeros(N_KR,N_INSIDE*4);
+   startt = hsec;
+   loop_KR = 1;
+   do while loop_KR <= rows(KR1);
+      print "loop: " loop_KR;
+      b1 = B + (chol(VCOV)')*rndns(rows(B),1,SEED1);   
+      { WTP, DEMAND, DEMAND2 } = wtp1(b1);
+      KR1[loop_KR,1:3] = meanc(WTP)';
+      KR1[loop_KR,4:7] = meanc(DEMAND)';  
+      KR2[loop_KR,.] =  meanc(DEMAND2)';    
+      if ismiss(meanc(WTP));
+          print "miss";
+      else;
+        loop_KR = loop_KR + 1;
+      endif;	  
+   endo;
+   stopt = hsec;
+   fmat = "       Krinsky-Robb Monte Carlo Simulation, U_FUNCTION: %*.*lf";
+   title = ftos(U_FUNCTION,fmat,1,0);
+   print "******************************************************************";
+   print title;
+   print "******************************************************************";
+   print "Time (in minutes):                 " ((-startt+stopt)/6000);
+   print "Number of Krinsky-Robb Iterations: " rows(KR1);
+   print "Total Generated Draws:              " N_SIM;
+   print;
+   print;				
+
+   KR_ALL = KR1~KR2; 
+   wtpl1 = zeros(cols(KR1),1);
+   wtpu1 = zeros(cols(KR1),1);
+   k = 1;
+   do while k <= cols(KR1);
+      {wtpl1[k],wtpu1[k]} = confint(KR1[.,k]);
+      k = k + 1;
+   endo;
+
+   wtpl2 = zeros(cols(KR2),1);
+   wtpu2 = zeros(cols(KR2),1);
+   k = 1;
+   do while k <= cols(KR2);
+      {wtpl2[k],wtpu2[k]} = confint(KR2[.,k]);
+      k = k + 1;
+   endo;
+
+   print "Demand (Scenario #0 means the baseline)";
+   print "       SCENARIO           MEAN            SD               95%lower         95%upper";   
+   print seqa(0,1,4)~meanc(KR1[.,4:7])~stdc(KR1[.,4:7])~wtpl1[4:7]~wtpu1[4:7];
+   print;				
+   print;				
+   print "Demand for Each Good (Scenario #0 means the baseline)";
+   print "       SCENARIO           GOOD              MEAN            SD             95%lower         95%upper";   
+   print (reshape(seqa(0,1,4).*ones(4,N_INSIDE),4.*N_INSIDE,1)
+        ~(seqa(1,1,N_INSIDE)|seqa(1,1,N_INSIDE)|seqa(1,1,N_INSIDE)|seqa(1,1,N_INSIDE))
+        ~meanc(KR2)~stdc(KR2)~wtpl2~wtpu2);
+   print;				
+   print;				
+   print "WTP";
+   print "       SCENARIO           MEAN            SD               95%lower         95%upper";   
+   print seqa(1,1,3)~meanc(KR1[.,1:3])~stdc(KR1[.,1:3])~wtpl1[1:3]~wtpu1[1:3];
+   print;				
+   print;
+endif;
+
+
+@ THIS IS THE END OF THE MAIN PROGRAM  					@
+@ PROCS FOLLOW 								@
+
+proc (6) = mydata(DATA) ;
+    local idx, data_x, data_psi, data_income, data_price, data_out, data_cset; 
+    idx = 2;
+    data_x = DATA[.,idx:(idx+(N_GOODS-1)-1)]; @ Inside goods (x_k)  @
+    idx = idx + N_GOODS - 1;
+    data_psi = DATA[.,idx:(idx+(N_GOODS-1).*N_PSI-1)]; @ Psi @
+    idx = idx + (N_GOODS-1).*N_PSI;
+    data_income = DATA[.,idx];  @ Income @
+    idx = idx + 1;
+    data_price = DATA[.,idx:(idx+(N_GOODS-1)-1)]; @ Price @
+    data_out = data_income - sumc((data_price.*data_x)'); @ Outside good: Hicks composite good of money @
+    data_cset = ones(N_OBS, (N_GOODS-1));
+    retp(data_x, data_psi, data_income, data_price, data_out, data_cset);   
+endp;
+
+
+@ WILLINGNESS TO PAY PROCEDURE 						@
+
+proc (3) = wtp1(bn) ;
+
+    local psi_beta, psi0, psi1, psi2, psi3 ;
+    local wtpall, wtp1i, wtp2i, wtp3i ;
+    local demandall, demandbi, demand1i, demand2i, demand3i ;
+    local utilb, demandall2, sig, s, k, gammak;
+    local alpha1, alphak, like;
+    local err0, errk, psiout, psi0n, psi1n, psi2n, psi3n;
+    local v1_plus, v1_minus, vk_plus, vk_minus, dv_plus, dv_minus, tau;
+
+    @ Loading parameters @
+    k = 1;
+    @ PSI @
+    if N_PSI > 0;
+        psi_beta = bn[k:(k+N_PSI-1)];
+        k = k + N_PSI;
+    else;
+        psi_beta  = 0;
+    endif;    
+    @ ALPHA @
+    alpha1 = bn[k];
+    k = k + 1;
+    if N_ALPHA == 1;
+        alphak = alpha1.*ones(1,N_INSIDE);
+    elseif N_ALPHA == 2;
+        alphak = bn[k].*ones(1,N_INSIDE) ; 
+        k = k + 1;
+    else;
+        alphak = bn[k:(k+N_INSIDE-1)]'; 
+        k = k + N_INSIDE;
+    endif;
+
+    @ gamma @
+    if N_GAMMA == 0;
+        gammak = ones(N_OBS,1);
+    elseif N_GAMMA == 1;
+        gammak = bn[k].*ones(N_OBS,1);
+        k = k + 1;
+    else;      
+		gammak = bn[k:(k+N_INSIDE-1)]'.*ones(N_OBS,N_INSIDE);
+        k = k + N_INSIDE;
+    endif;
+    
+    @ SIGMA @
+    sig = bn[k];
+    k = k + 1;
+
+    like = zeros(N_OBS,1);
+    wtpall    = zeros(N_OBS,3) ;   
+    demandall = zeros(N_OBS,4) ;
+    demandall2 = zeros(N_OBS,4*N_INSIDE) ;
+    
+    psi0 = psii(PSIDATA, psi_beta) ;
+    psi1 = psii(PSIDATA1, psi_beta) ;
+    psi2 = psii(PSIDATA2, psi_beta) ;
+    psi3 = psii(PSIDATA3, psi_beta) ;
+
+    v1_plus  = -my_ln(alpha1)+my_ln(XOUT1^alpha1-(XOUT1-PRICE)^alpha1);
+    v1_minus = -my_ln(alpha1)+my_ln((XOUT1+PRICE)^alpha1-XOUT1^alpha1);
+
+    if ((U_FUNCTION != 2).*(U_FUNCTION != 5)); @ alpha or hybrid profile @     
+        vk_plus  = my_ln(gammak) + psi0 -my_ln(alphak)+my_ln(((X_INSIDE+1)./gammak+1)^alphak-(X_INSIDE./gammak+1)^alphak);
+        vk_minus = my_ln(gammak) + psi0 -my_ln(alphak)+my_ln((X_INSIDE./gammak+1)^alphak-((X_INSIDE-1)./gammak+1)^alphak);
+    else; @ gamma profile @
+        vk_plus = my_ln(gammak) + psi0 + my_ln(my_ln((X_INSIDE+1)./gammak+1)-my_ln(X_INSIDE./gammak+1)) ;
+        vk_minus = my_ln(gammak) + psi0 + my_ln(my_ln(X_INSIDE./gammak+1)-my_ln((X_INSIDE-1)./gammak+1)) ;
+    endif;
+
+    dv_plus = (v1_plus - vk_plus);
+    dv_minus = (v1_minus - vk_minus);
+
+    s = 1 ;
+    do while s <= N_SIM ;
+        err0 = -ln(-ln(rndus(N_OBS,1,SEED1))); @ Type I extreme value @
+        tau = rndus(N_OBS,N_INSIDE,SEED1);
+        errk = (X_INSIDE .> 0).*(
+            -ln(-ln((1-tau).*cdfgb((dv_plus + err0)./sig) + tau.*cdfgb((dv_minus + err0)./sig))).*sig);        
+        errk = errk + (X_INSIDE .== 0).*( 
+            -ln(-ln(tau.*cdfgb((dv_plus + err0)./sig) )).*sig );
+                
+        psiout = my_exp(err0);
+        psi0n = my_exp(psi0 + errk);        
+        psi1n = my_exp(psi1 + errk);
+        psi2n = my_exp(psi2 + errk); 
+        psi3n = my_exp(psi3 + errk);  
+     				
+
+        @ Baseline Condition @
+        struct util_data ud0;
+            ud0.demand = X_INSIDE;
+            ud0.price = PRICE;
+            ud0.alpha1 = alpha1;
+            ud0.alphak = alphak;
+            ud0.gammak = gammak;
+            ud0.psik = psi0n;
+            ud0.psiout = psiout;
+            ud0.xout = XOUT1;
+            ud0.keep = CSET_INSIDE;
+            ud0.sig = sig;
+            utilb = dutil(ud0);
+
+        @ SCENARIO #1 @
+            struct demand_data md;
+            md.psi = psi1n;
+            md.psiout = psiout;
+            md.price = PRICE1;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE1;
+            wtp1i = cdemand(md);
+
+        @ SCENARIO #2 @
+            md.psi = psi2n;
+            md.psiout = psiout;
+            md.price = PRICE2;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE2;
+            wtp2i = cdemand(md);
+
+
+        @ SCENARIO #3 @
+            md.psi = psi3n;
+            md.psiout = psiout;
+            md.price = PRICE3;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE3;
+            wtp3i = cdemand(md);
+            wtpall = wtpall + (wtp1i~wtp2i~wtp3i)./N_SIM;
+
+        @ --- Demand Calculations --- @
+
+        @ Baseline Condition @
+            
+            md.psi = psi0n;
+            md.psiout = psiout;
+            md.price = PRICE;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE;
+            md.xout = XOUT1;
+            demandbi = udemand(md);
+
+        @ SCENARIO #1 @
+            md.psi = psi1n;
+            md.psiout = psiout;
+            md.price = PRICE1;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE1;
+            md.xout = XOUT1;
+            demand1i = udemand(md);
+
+        @ SCENARIO #2 @
+            md.psi = psi2n;
+            md.psiout = psiout;
+            md.price = PRICE2;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE2;
+            md.xout = XOUT1;
+            demand2i = udemand(md);
+
+        @ SCENARIO #3 @
+            md.psi = psi3n;
+            md.psiout = psiout;
+            md.price = PRICE3;
+            md.inc = INCOME;
+            md.util0 = utilb;
+            md.alpha1 = alpha1;
+            md.alphak = alphak;
+            md.gammak = gammak;
+            md.keep = CSET_INSIDE3;
+            md.xout = XOUT1;
+            demand3i = udemand(md);
+            demandall = demandall + (sumc(demandbi')~sumc(demand1i')~sumc(
+                demand2i')~sumc(demand3i'))./N_SIM;
+            demandall2 = demandall2 + (demandbi~demand1i~demand2i~demand3i)
+                ./N_SIM;
+        s = s + 1;
+    endo;
+    retp(wtpall,demandall,demandall2);   
+endp;
+         
+@ Procedures for Solving Uncompensated Demand @
+
+proc udemand(struct demand_data md);
+    local demand, j, k, xk, utilcand, xkcand, util0, maxk, maxu;
+    xk = zeros(N_OBS,N_INSIDE);
+    demand = zeros(N_OBS,N_INSIDE);
+    struct util_data ud0;
+        ud0.demand = demand;
+        ud0.price = md.price;
+        ud0.alpha1 = md.alpha1;
+        ud0.alphak = md.alphak;
+        ud0.gammak = md.gammak;
+        ud0.psik = md.psi;
+        ud0.psiout = md.psiout;
+        ud0.keep = md.keep;
+        ud0.xout = md.inc - sumc((md.price .* demand .* md.keep)');
+    util0 = dutil(ud0);
+	j = 1;
+	do while j .le MAX_X;
+		k = 1;
+        utilcand = zeros(N_OBS,N_INSIDE);
+		do while k .le N_INSIDE;
+            xkcand = xk;
+            xkcand[.,k] = xk[.,k] + md.keep[.,k];
+            ud0.demand = xkcand;
+            ud0.xout = md.inc - sumc((md.price .* xkcand .* md.keep)');
+            ud0.xout = (ud0.xout .gt 0).*ud0.xout;
+            utilcand[.,k] = dutil(ud0);
+            utilcand[.,k] = (md.inc .gt sumc((md.price.*xkcand)')).*utilcand[.,k]
+                          + (md.inc .le sumc((md.price.*xkcand)')).*(-99999).*ones(N_OBS,1);
+			k = k + 1;
+		endo;
+		maxk = maxindc(utilcand');
+        maxu = maxc(utilcand');
+        xk = xk + (maxu.*ones(N_OBS,N_INSIDE) .== utilcand).*(maxu .gt util0); 
+		if sumc((maxu .gt util0)) .== 0;
+            break;
+        else;
+            util0 = maxu;
+        endif;
+		j = j + 1;
+	endo;    
+    retp(xk);
+endp;
+
+@ PROCEDURES FOR RECOVERING HICKSIAN DEMANDS				@
+
+proc cdemand(struct demand_data md) ;
+    local demand, hcea, util0, utiln, hcl1, hch1, k, inc ;
+    hcl1 = -md.inc ;
+    hch1 = md.inc ;
+    hcea = (hcl1+hch1)./2 ; 
+    demand = X_INSIDE;
+    inc = md.inc;
+    util0 = md.util0;
+
+    struct util_data ud1;
+        ud1.demand = demand;
+        ud1.price = md.price;
+        ud1.alpha1 = md.alpha1;
+        ud1.alphak = md.alphak;
+        ud1.gammak = md.gammak;
+        ud1.psik = md.psi;
+        ud1.psiout = md.psiout;
+        ud1.keep = md.keep;
+        ud1.xout = hcea;
+    
+    k = 1;
+    do while k <= 25;
+        md.inc = inc - hcea;
+        demand = udemand(md);
+        ud1.xout = inc - hcea - sumc((md.price.*md.keep.*demand)');
+        ud1.demand = demand;
+        utiln = dutil(ud1) ;
+        hcl1 = hcl1.*(utiln.<util0) + hcea.*(utiln.>=util0) ;
+        hch1 = hch1.*(utiln.>util0) + hcea.*(utiln.<=util0) ;
+        hcea = (hcl1+hch1)./2 ;
+
+        k = k + 1;
+   endo ;   
+   retp(hcea) ;         
+endp ;
+
+
+@ Procedure for Calculating Direct Utility Function @
+
+proc dutil(struct util_data ud0);
+    local utility, ux1, uxk;
+    ux1 = (ud0.psiout./ud0.alpha1).*(ud0.xout^ud0.alpha1);
+    if ((U_FUNCTION != 2).*(U_FUNCTION != 5)); @ alpha or hybrid profile @
+        uxk = sumc( (ud0.gammak.*ud0.psik.*ud0.keep./ud0.alphak
+            .*((ud0.demand./ud0.gammak + ones(N_OBS,1)).^ud0.alphak - ones(N_OBS,1)))');
+    else; @ gamma profile @
+        uxk = sumc(( ud0.gammak.*ud0.psik.*ud0.keep.*ln(ud0.demand./ud0.gammak + ones(N_OBS,1)))');
+    endif;   
+    utility = ux1 + uxk;
+    retp(utility);
+endp;
+
+proc psii(data, ppsi) ;
+   local k, psif ;
+   psif = zeros(N_OBS,N_INSIDE) ;
+   if N_PSI > 0 ;
+      k = 1 ;	@ counter for location @
+      do while k <= N_PSI ;
+         psif = psif + ppsi[k].*
+               data[.,((k-1)*N_INSIDE+1):(k*N_INSIDE)] ;
+         k = k + 1 ;
+      endo ;
+   endif ;
+   retp(psif) ;
+endp ;
+
+@ Procedure for 95% confidence intervals @
+proc (2) = confint(x);
+    local xl, xu;
+    x = sortc(x,1);
+    xl = ceil(rows(x)*.025);
+    xu = ceil(rows(x)*(1-.025));
+    retp(x[xl,1],x[xu,1]);
+endp;
+
+
+@ MY PROCEDURE FOR GENERATING NATURAL LOGS				@
+
+proc my_ln(x);
+   local y ;
+   y = (x.<1e-250).*1e-250 + (x.>=1e-250).*x ;
+   retp(ln(y));
+endp;
+
+
+@ MY PROCEDURE FOR GENERATING EXPONENTIALS				@
+
+proc my_exp(x);
+   local y ;
+   y = (x.<-700).*(-700)+(abs(x).<=700).*x+(x.>=700).*(700) ;
+   retp(exp(y));
+endp;
+
+proc cdfgb(x);
+   local y ;
+   y = my_exp(-my_exp(-x)) ;
+   retp(y);
+endp;
+

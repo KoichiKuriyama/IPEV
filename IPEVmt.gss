@@ -1,0 +1,491 @@
+/*
+*************************************************************
+                                                                 
+    Estimation Code of Integer Programming Extreme Value
+                      maxlikmt version
+                          v1.00
+
+                        Written by 
+
+                      Koich Kuriyama
+
+            Division of Natural Resource Economics,
+                Graduate School of Agriculture,
+                      Kyoto University
+                  Oiwake-cho, Kitashirakawa, 
+                Sakyo-ku, Kyoto 606-8502, JAPAN
+                 E-mail kuriyama.koichi.8w@kyoto-u.ac.jp
+    　　  Web: http://kkuri.eco.coocan.jp/index-e.html
+
+                         03/18/2023
+
+*************************************************************
+*/
+
+/*
+Data format for N_GOODS = 6
+  1:    person id 
+  2- 6: consumption of inside goods (x_2,...,x_6)
+  7- 11: psi1 (z1_2,....,z1_6)
+ 12- 16: psi2 (z2_2,....,z2_6)
+ 17- 21: psi3 (z3_2,....,z3_6)
+ 22:     income
+ 23- 27: price (price_2,...,price_6)
+*/
+
+outwidth 256;
+screen on;
+cls;
+
+TEST1 = 0;
+TEST2 = 0;
+TEST3 = 0;
+TEST4 = 0;
+
+@--------------------------@
+@      SETTING START       @
+@--------------------------@
+
+@ Output File Setting @
+output file = IPEV.out reset;
+
+@ Loading data @
+load DATA[2000,27] = data.txt; @ Data File @
+
+@ Number of observations @
+N_OBS = rows(DATA);
+
+@ Number of goods (including an outside good) @
+N_GOODS = 6;
+
+@ Nubmer of Psi variables @
+N_PSI = 3; 
+
+@ Function form @
+@ U_FUNCTION = 1; alpha profile @
+@ U_FUNCTION = 2; gamma profile @
+@ U_FUNCTION = 3; hybrid profile @
+@ U_FUNCTION = 4; alpha profile without fixed effect @
+@ U_FUNCTION = 5; gamma profile without fixed effect  @
+@ U_FUNCTION = 6; hybrid profile without fixed effect  @
+
+U_FUNCTION = 3;
+
+@--------------------------@
+@       OTHER SETTING      @
+@--------------------------@
+
+@ Estimation using closed-form or simulation @
+SIMULATE = 0;  @ 0: closed-form, 1: simulation @
+
+@ Number of iteration of simulated likelihood @
+N_SIM = 100;
+
+@ HALT = 1 if Halton sequences, 0 otherwise @
+HALT = 1;
+
+@ Random seed @
+SEED1 = 12345;
+
+@ Maximum number of iterations in the maximum likelihood estimation @
+ML_NITER = 200;
+
+@ Tolerance for convergence @
+ML_TOL = 1.e-5;
+
+@ Output of intermediate results @
+ML_OUTPUT = 1; @ 1: output results, 0: no output @ 
+
+@ Optimization algorithm @
+@ MAXLIKMT 1:BFGS, 2:DFP, 3:Newton, 4:BHHH @
+ML_ALG = 4; 
+
+@--------------------------@
+@        SETTING END       @
+@--------------------------@
+
+N_INSIDE = N_GOODS - 1;
+
+@ Starting values @
+
+@ Psi: N_PSI x 1 @
+B_PSI = zeros(N_PSI,1);
+B_PSI[1,1] = -1; @ Psi1: const. @
+
+@ Alpha @
+if U_FUNCTION == 1;
+    N_ALPHA = N_GOODS;
+elseif (U_FUNCTION == 2)+(U_FUNCTION == 3)+(U_FUNCTION == 5)+(U_FUNCTION == 6);
+    N_ALPHA = 1;
+elseif U_FUNCTION == 4;
+    N_ALPHA = 2;
+else;
+    print "Error in U_FUNCTION";
+    stop;
+endif;
+
+B_ALPHA = -0.5.*ones(N_ALPHA,1);
+
+@ Gamma @
+if (U_FUNCTION == 1)+(U_FUNCTION == 4);
+    N_GAMMA = 0;
+elseif (U_FUNCTION == 2)+(U_FUNCTION == 3);
+    N_GAMMA = N_INSIDE;
+elseif (U_FUNCTION == 5)+(U_FUNCTION == 6);
+    N_GAMMA = 1;
+endif;
+
+if N_GAMMA == 0;
+    B_GAMMA = 0;
+else;
+    B_GAMMA = zeros(N_GAMMA,1);
+endif;
+
+B_SIGMA = zeros(1,1);
+
+if N_GAMMA == 0;
+    B = B_PSI|B_ALPHA|B_SIGMA;
+else;
+    B = B_PSI|B_ALPHA|B_GAMMA|B_SIGMA;
+endif;
+
+@ Variable names @
+V_PSI = 0 $+ "PSI" $+ ftocv(seqa(1,1,rows(B_PSI)),2,0);
+V_ALPHA = 0 $+ "Alpha" $+ ftocv(seqa(1,1,rows(B_ALPHA)),2,0);
+V_SIG = {"Sigma"};
+if N_GAMMA >0;
+    V_GAMMA = 0 $+ "Gamma" $+ ftocv(seqa(1,1,rows(B_GAMMA)),2,0);
+    VNAME = V_PSI|V_ALPHA|V_GAMMA|V_SIG;
+else;
+    VNAME = V_PSI|V_ALPHA|V_SIG;    
+endif;
+
+@ Generating data @
+
+IDX = 2;
+X_INSIDE = DATA[.,IDX:(IDX+N_INSIDE-1)]; @ Inside goods (x_k)  @
+IDX = IDX + N_INSIDE;
+PSIDATA = DATA[.,IDX:(IDX+N_INSIDE.*N_PSI-1)]; @ Psi @
+IDX = IDX + N_INSIDE.*N_PSI;
+INCOME = DATA[.,IDX];  @ Income @
+IDX = IDX + 1;
+PRICE = DATA[.,IDX:(IDX+N_INSIDE-1)]; @ Price @
+XOUT1 = INCOME - sumc((PRICE.*X_INSIDE)'); @ Outside good: Hicks composite good of money @
+
+@ Generating random numbers @
+if SIMULATE ==1;  @ use simulation @
+    prim = { 3 5 7 11 13 17 19 23 29 31 37 41 43 47 53 59 61 67 71
+             73 79 83 89 97 101 103 107 109 113 };
+
+    SIMS = zeros(N_OBS,1);
+    N_RANDOM = 1; 
+
+    i = 1;
+    if HALT == 1 and N_SIM > 1;
+        do while i <= N_RANDOM;
+            halt1 = halton(10+N_OBS*N_SIM,prim[i]);
+            SIMS = SIMS~halt1;
+            i = i + 1;
+        endo;
+        SIMS = SIMS[.,2:(N_RANDOM*N_SIM+1)];
+    elseif HALT == 0 and N_SIM > 1;
+        SIMS = -ln(-ln(-rndus(N_OBS,(N_RANDOM*N_SIM),SEED1))); @ Type I extreme value @
+    endif;
+else; @ use closed-form @
+    @ Generating sj matrix @
+    SJ_IDX = zeros(N_OBS,2);
+    SJ_MAT = zeros(1,N_INSIDE);
+    n = 1;
+    do while n <= N_OBS;
+        sjn = bin_mat(X_INSIDE[n,.]);
+        SJ_IDX[n,1] = rows(SJ_MAT)+1;
+        SJ_IDX[n,2] = SJ_IDX[n,1] + rows(sjn)-1;
+        SJ_MAT = SJ_MAT|sjn;
+        n = n + 1;
+    endo;
+endif;
+
+ESTIMATION_MODE = 1;
+
+library maxlikmt;
+#include maxlikmt.sdf
+
+struct DS d0;
+d0 = reshape(dsCreate,2,1);
+d0[1].dataMatrix = X_INSIDE;
+d0[2].dataMatrix = PRICE;
+
+struct PV p0;
+
+p0 = pvPacki(pvCreate,B_PSI,"Psi",1);
+p0 = pvPacki(p0,B_ALPHA,"Alpha",2);
+if N_GAMMA >0;
+    p0 = pvPacki(p0,B_GAMMA,"Gamma",3);
+endif;
+p0 = pvPacki(p0,B_SIGMA,"Sigma",4);
+
+struct maxlikmtControl c0;
+c0 = maxlikmtcontrolcreate;
+c0.MaxIters = ML_NITER;
+c0.Tol = ML_TOL;
+c0.PrintIters = ML_OUTPUT;
+c0.Algorithm = ML_ALG;
+
+if SIMULATE == 1;
+    fmat = "IPEV model with simulation, U_FUNCTION: %*.*lf";
+else;
+    fmat = "IPEV model with closed-form, U_FUNCTION: %*.*lf";
+endif;
+c0.title =ftos(U_FUNCTION,fmat,1,0);
+
+struct maxlikmtResults out1;
+out1 = maxlikmtprt(maxlikmt(&ll,p0,d0,c0));
+
+    
+ESTIMATION_MODE = 0;
+
+struct DS d1;
+d1 = reshape(dsCreate,2,1);
+d1[1].dataMatrix = X_INSIDE;
+d1[2].dataMatrix = PRICE;
+
+beta = pvGetParVector(out1.par);
+beta = beta[1:N_PSI]|(1-exp(beta[(N_PSI+1):(N_PSI+N_ALPHA)]))|exp(beta[(N_PSI+N_ALPHA+1):rows(beta)]);
+
+B_PSI = beta[1:N_PSI];
+k = N_PSI+1;
+B_ALPHA = beta[(N_PSI+1):(N_PSI+N_ALPHA)];
+if N_GAMMA > 0;
+    B_GAMMA = beta[(N_PSI+N_ALPHA+1):(N_PSI+N_ALPHA+N_GAMMA)];
+endif;
+B_SIGMA = beta[rows(beta)];
+
+struct PV p1;
+
+p1 = pvPacki(pvCreate,B_PSI,"Psi",1);
+p1 = pvPacki(p1,B_ALPHA,"Alpha",2);
+if N_GAMMA >0;
+    p1 = pvPacki(p1,B_GAMMA,"Gamma",3);
+endif;
+p1 = pvPacki(p1,B_SIGMA,"Sigma",4);
+
+struct maxlikmtControl c1;
+c1 = maxlikmtcontrolcreate;
+c1.MaxIters = 2;
+c1.Tol = ML_TOL;
+c1.PrintIters = ML_OUTPUT;
+c1.Algorithm = ML_ALG;
+
+if SIMULATE == 1;
+    fmat = "(Reparametrized) IPEV model with simulation, U_FUNCTION: %*.*lf";
+else;
+    fmat = "(Reparametrized) IPEV model with closed-form, U_FUNCTION: %*.*lf";
+endif;
+c1.title =ftos(U_FUNCTION,fmat,1,0);
+
+struct maxlikmtResults out2;
+out2 = maxlikmtprt(maxlikmt(&ll,p1,d0,c1));
+print "beta";
+print pvGetParVector(out2.par);
+print;
+print "cov";
+print out2.CovPar;
+format /m1 /res 16,6;
+print;
+
+
+@ Procedure for generating Halton sequences for Type I extreme value @
+
+proc halton(n,s);
+    local phi,phif,i,j,y,x,k;
+    k = floor(ln(n+1) ./ ln(s));
+    phi = {0};
+    i = 1;
+    do while i .le k;
+        x = phi;
+        j = 1;
+        do while j .lt s;
+            y = phi + (j/s^i);
+            x = x|y;
+            j = j + 1;
+        endo;
+        phi = x;
+        i = i + 1;
+    endo;
+    x = phi;
+    j = 1;
+    do while j .lt s .and rows(x) .lt (n+1);
+        y = phi + (j/s^i);
+        x = x|y;
+        j = j + 1;
+    endo;
+    phi=-ln(-ln(x[11:(n+1),1])); @ Type I extreme value @
+    phif = reshape((phi)',N_OBS,N_SIM);
+    retp(phif);
+endp;
+
+
+@ Procedure of log-likelihood function @
+
+proc ll(struct PV p, struct DS d, c0);
+    local bn, k, psi_beta, alpha1, alphak, gammak, sig, psik, like; 
+    local v1_plus, v1_minus, vk_plus, vk_minus, dv_plus, dv_minus;
+    local sj, numerator, denominator, n, s, eps1, like1;
+
+    struct modelResults mm;    
+
+    @ Loading parameters @
+    k = 1;
+    @ PSI @
+    if N_PSI > 0;
+        psi_beta = pvUnpack(p,1);
+    else;
+        psi_beta  = 0;
+    endif;    
+    @ ALPHA @
+    bn = pvUnpack(p,2);
+    alpha1 = (ESTIMATION_MODE .==1).*(1-exp(bn[1])) + (ESTIMATION_MODE .==0).*(bn[1]);
+    if N_ALPHA == 1;
+        alphak = alpha1.*ones(1,N_INSIDE);
+    elseif N_ALPHA == 2;
+        alphak = (ESTIMATION_MODE .==1).*(1-exp(bn[1])).*ones(1,N_INSIDE) 
+               + (ESTIMATION_MODE ./=1).*bn[1].*ones(1,N_INSIDE) ; 
+    else;
+        alphak = (ESTIMATION_MODE .==1).*((1-exp(bn[2:rows(bn)]))') 
+               + (ESTIMATION_MODE ./=1).*(bn[2:rows(bn)]'); 
+    endif;
+
+    @ gamma @
+    bn = pvUnpack(p,3);
+    if N_GAMMA == 0;
+        gammak = ones(N_OBS,1);
+    elseif N_GAMMA == 1;
+        gammak = (ESTIMATION_MODE .==1).*(exp(bn).*ones(N_OBS,1))
+                   + (ESTIMATION_MODE ./=1).*(bn.*ones(N_OBS,1));
+    else;      
+		gammak = (ESTIMATION_MODE .==1).*(exp(bn)'.*ones(N_OBS,N_INSIDE))
+               + (ESTIMATION_MODE ./=1).*(bn'.*ones(N_OBS,N_INSIDE));
+    endif;
+    
+    @ SIGMA @
+    bn = pvUnpack(p,4);
+    sig = (ESTIMATION_MODE .==1).*(exp(bn)) + (ESTIMATION_MODE ./=1).*(bn);
+
+    like = zeros(N_OBS,1);
+
+    TEST1 = psi_beta;
+    psik = psii(PSIDATA, psi_beta) ;
+
+    v1_plus  = -my_ln(alpha1)+my_ln(XOUT1^alpha1-(XOUT1-PRICE)^alpha1);
+    v1_minus = -my_ln(alpha1)+my_ln((XOUT1+PRICE)^alpha1-XOUT1^alpha1);
+
+    if ((U_FUNCTION != 2).*(U_FUNCTION != 5)); @ alpha or hybrid profile @     
+        vk_plus  = my_ln(gammak) + psik -my_ln(alphak)+my_ln(((X_INSIDE+1)./gammak+1)^alphak-(X_INSIDE./gammak+1)^alphak);
+        vk_minus = my_ln(gammak) + psik -my_ln(alphak)+my_ln((X_INSIDE./gammak+1)^alphak-((X_INSIDE-1)./gammak+1)^alphak);
+    else; @ gamma profile @
+        vk_plus = my_ln(gammak) + psik + my_ln(my_ln((X_INSIDE+1)./gammak+1)-my_ln(X_INSIDE./gammak+1)) ;
+        vk_minus = my_ln(gammak) + psik + my_ln(my_ln(X_INSIDE./gammak+1)-my_ln((X_INSIDE-1)./gammak+1)) ;
+    endif;
+
+    dv_plus = (v1_plus - vk_plus)./sig;
+    dv_minus = (v1_minus - vk_minus)./sig;
+    
+    like = zeros(N_OBS,1);
+    if SIMULATE /= 1; @ closed-form @
+        n = 1;
+        do while n .<= N_OBS;
+            sj = SJ_MAT[SJ_IDX[n,1]:SJ_IDX[n,2],.];
+            numerator = prodc(((-1)^(1-sj))');            
+            denominator = 1 + sumc((sj.*my_exp(-dv_plus[n,.]) + (1-sj).*my_exp(-dv_minus[n,.]))');                        
+            like[n] = sumc(numerator./denominator);
+            n = n + 1;
+        endo;
+    else;
+        s = 1;
+        do while s <= N_SIM;
+            eps1 = SIMS[1:N_OBS,s].*sig;
+            like1 = prodc(((cdfgb(dv_plus + eps1./sig) - cdfgb(dv_minus + eps1./sig))^((X_INSIDE.>0))
+                    .*((cdfgb(dv_plus + eps1./sig))^((X_INSIDE.==0)))
+                    )');
+            like = like + like1 ./ N_SIM;
+            s = s + 1 ; 							       
+        endo;
+    endif;
+    mm.function = ln(like);
+    retp(mm);							 
+endp;
+
+proc psii(data, ppsi) ;
+   local k, psif ;
+   psif = zeros(N_OBS,N_INSIDE) ;
+   if N_PSI > 0 ;
+      k = 1 ;	@ counter for location @
+      do while k <= N_PSI ;
+         psif = psif + ppsi[k].*
+               data[.,((k-1)*N_INSIDE+1):(k*N_INSIDE)] ;
+         k = k + 1 ;
+      endo ;
+   endif ;
+   retp(psif) ;
+endp ;
+
+@ Procedure for generating binary matrix @
+proc bin_mat(x);  @ x = QUANTD[n,.] @
+    local x_sum, i, j, k, m, bin, bin_mat, y;
+    x_sum = sumc((x.>0)');
+    if x_sum == 0;
+        y = ones(1,cols(x));
+    else;
+        bin_mat = zeros(1, x_sum);
+        bin = zeros(1, x_sum);
+        j = 1;
+
+        do while j < 2^x_sum;
+          i = 1;
+          m = j;
+          do while m > 0;
+              bin[1,i] = m % 2;
+              m = floor(m / 2);
+              i = i + 1;
+          endo;
+          bin_mat = bin_mat | bin;
+          j = j + 1;
+        endo;
+        y = ones(rows(bin_mat),cols(x));
+        k = 1;
+        i = 1;
+        do while k <= cols(x);
+            if x[1,k] > 0;
+                y[.,k] = bin_mat[.,i];
+                i = i + 1;
+            endif;
+            k = k + 1;
+        endo;
+    endif;
+    retp(y);
+endp;    
+
+@ My procedure for generating natural logs @
+
+proc my_ln(x);
+   local y;
+   y = (x.<1e-250).*1e-250 + (x.>=1e-250).*x;
+   retp(ln(y));
+endp;
+
+
+@ My procedure for generating exponentials @
+
+proc my_exp(x);
+   local y;
+   y = (x.<-700).*(-700)+(abs(x).<=700).*x+(x.>=700).*(700);
+   retp(exp(y));
+endp;
+
+@ My procedure for generating CDF Gumbel				@
+
+proc cdfgb(x);
+   local y ;
+   y = my_exp(-my_exp(-x)) ;
+   retp(y);
+endp;
