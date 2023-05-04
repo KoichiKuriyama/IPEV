@@ -8,7 +8,7 @@ The integer programing extreme value (IPEV) model  accounts the integer property
 
 ## Usage
 **Estimation:**
-- Set the parameters in  **IPEV.gss**
+- Set the parameters in  **[IPEV.gss](https://github.com/KoichiKuriyama/IPEV/blob/350163d7f20746fc02f169a37a2c77b7c9745bfd/IPEV.gss)** (required maxlik) or **[IPEVmt.gss](https://github.com/KoichiKuriyama/IPEV/blob/350163d7f20746fc02f169a37a2c77b7c9745bfd/IPEVmt.gss)** (required maxlikmt)
   - **U_FUNCTION**: the utility function
   - For the estimation with closed-form, set the **SIMULATE = 0**
   - For the estimation with simulation, set the **SIMULATE = 1**
@@ -17,7 +17,7 @@ The integer programing extreme value (IPEV) model  accounts the integer property
 >> run IPEV.gss
 ```
 **Prediction:**
-- Set the parameters in  **DEMAND.gss**
+- Set the parameters in  **[DEMAND.gss](https://github.com/KoichiKuriyama/IPEV/blob/350163d7f20746fc02f169a37a2c77b7c9745bfd/DEMAND.gss)**
   - **U_FUNCTION**: the utility function
   - **B**: vector of estimated parameters
   - **VCOV**: variance-covariance matrix
@@ -26,3 +26,5 @@ The integer programing extreme value (IPEV) model  accounts the integer property
 ```
 >> run DEMAND.gss
 ```
+## Manual
+For the detail, see **[manual.pdf](https://github.com/KoichiKuriyama/IPEV/blob/350163d7f20746fc02f169a37a2c77b7c9745bfd/manual.pdf)**.
