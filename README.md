@@ -5,7 +5,7 @@ The integer programing extreme value (IPEV) model  accounts the integer property
 ![Figure1](https://github.com/KoichiKuriyama/IPEV/blob/ea21771ee08a32b8e972ec9692fe57e7b850361b/figure/fig1.png)
 Figure 1. Continuous and integer demand models.
 
-## Requirement
+## Requirements
 - GAUSS platform [Aptech](https://www.aptech.com)
 - maxlik or maxlikmt [Aptech](https://www.aptech.com)
 
