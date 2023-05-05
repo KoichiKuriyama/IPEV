@@ -19,12 +19,18 @@ Figure 1. Continuous and integer demand models.
 ```
 >> run IPEV.gss
 ```
+or
+```
+>> run IPEVmt.gss
+```
+
+
 **Prediction:**
 - Set the parameters in  **[DEMAND.gss](https://github.com/KoichiKuriyama/IPEV/blob/350163d7f20746fc02f169a37a2c77b7c9745bfd/DEMAND.gss)**
   - **U_FUNCTION**: the utility function
   - **B**: vector of estimated parameters
   - **VCOV**: variance-covariance matrix
-  - Set secnarios
+  - Set secnarios for prediction and welfare analysis.
 - Run the prediction code in the GAUSS: 
 ```
 >> run DEMAND.gss
